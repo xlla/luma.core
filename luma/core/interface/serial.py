@@ -8,7 +8,7 @@ is I²C, SPI or bit-banging GPIO.
 """
 
 import errno
-
+import time
 import luma.core.error
 from luma.core import lib
 
@@ -135,6 +135,7 @@ class i2c(object):
             self._bus.close()
 
 
+
 @lib.rpi_gpio
 class bitbang(object):
     """
@@ -171,19 +172,66 @@ class bitbang(object):
         self._SCLK = self._configure(kwargs.get("SCLK"))
         self._SDA = self._configure(kwargs.get("SDA"))
         self._CE = self._configure(kwargs.get("CE"))
+        print("clk:{}, sda:{}, ce:{}".format(self._SCLK,self._SDA,self._CE))
+        self.set_line("TRI_STATE_ALL", 0)                                                                                                                           
+
         self._DC = self._configure(kwargs.get("DC"))
         self._RST = self._configure(kwargs.get("RST"))
-        self._cmd_mode = self._gpio.LOW  # Command mode = Hold low
-        self._data_mode = self._gpio.HIGH  # Data mode = Pull high
+        time.sleep(0.1)
+        self.set_line("TRI_STATE_ALL", 1) 
+        self._cmd_mode = 0  # Command mode = Hold low
+        self._data_mode = 1  # Data mode = Pull high
 
         if self._RST is not None:
-            self._gpio.output(self._RST, self._gpio.LOW)  # Reset device
-            self._gpio.output(self._RST, self._gpio.HIGH)  # Keep RESET pulled high
+            line = self._RST
+            #line = self._gpio.Chip('gpiochip0').get_line(self._RST)  
+            #print("reset device, pin - {}, {}".format(line, line.owner()))
+            print("pin - {}, {} / {}".format(self._RST, line.owner().name(), line.offset())) 
+            #line = line.owner().get_lines([line.offset()])                                         
+            line.set_value(0)
+            #line.set_value(0)
+            time.sleep(0.01)
+            line.set_value(1)  
+
+            #self._gpio.output(self._RST, self._gpio.LOW)  # Reset device
+            #self._gpio.output(self._RST, self._gpio.HIGH)  # Keep RESET pulled high
+
+    def set_line(self, name, value):                                                                                                                             
+        line = self._gpio.find_line(name)                                                                                                                       
+        line.request(consumer=line.owner().name(), type=self._gpio.LINE_REQ_DIR_OUT)                                                                            
+        line.set_value(value)                                                                                                                              
+        line.release()   
 
     def _configure(self, pin):
         if pin is not None:
-            self._gpio.setup(pin, self._gpio.OUT)
-            return pin
+            if pin == 7:
+                self.set_line("MUX32_DIR", 1)
+                line = self._gpio.Chip('gpiochip0').get_line(48) 
+                print("mux32")
+            elif pin == 8:
+                self.set_line("MUX30_DIR", 1)    
+                line = self._gpio.Chip('gpiochip0').get_line(49)
+                print("mux30")
+            elif pin == 9:
+                self.set_line("MUX28_DIR", 1)
+                line = self._gpio.Chip('gpiochip0').get_line(183)
+                print("mux28")                             
+
+            else:
+                print("unknow pin mapping !!!!!!!!!!")
+                return None
+            #self._gpio.setup(pin, self._gpio.OUT)
+            #chip = self._gpio.Chip('gpiochip0')
+            #line = self._gpio.Chip('gpiochip0').get_line(pin) 
+            #pinname = 'DIG{}_PU_PD'.format(pin)
+            #line = self._gpio.find_line(pinname) 
+            #print("pin - {}, {} / {}".format(pinname, line.owner().name(), line.offset()))
+            print("pin - {}, {} / {}".format(pin, line.owner().name(), line.offset())) 
+            line.request(consumer=line.owner().name(), type=self._gpio.LINE_REQ_DIR_OUT)
+            #line.release()  
+            
+            #return pin
+            return line
 
     def command(self, *cmd):
         """
@@ -193,7 +241,12 @@ class bitbang(object):
         :type cmd: int
         """
         if self._DC:
-            self._gpio.output(self._DC, self._cmd_mode)
+            #self._gpio.output(self._DC, self._cmd_mode)
+            line = self._DC
+            #line = line.owner().get_lines([line.offset()]) 
+            #line = self._gpio.Chip('gpiochip0').get_line(self._DC)   
+            line.set_value(self._cmd_mode)                   
+
 
         self._write_bytes(list(cmd))
 
@@ -206,7 +259,12 @@ class bitbang(object):
         :type data: list, bytearray
         """
         if self._DC:
-            self._gpio.output(self._DC, self._data_mode)
+            #self._gpio.output(self._DC, self._data_mode)
+            line = self._DC                                                               
+            #line = line.owner().get_lines([line.offset()])                                
+            #line = self._gpio.Chip('gpiochip0').get_line(self._DC)   
+
+            line.set_value(1)  
 
         i = 0
         n = len(data)
@@ -216,6 +274,7 @@ class bitbang(object):
             i += tx_sz
 
     def _write_bytes(self, data):
+        print("write ce {},sck  {}, sda {}".format(self._CE, self._SCLK, self._SDA))
         gpio = self._gpio
         if self._CE:
             gpio.output(self._CE, gpio.LOW)  # Active low
@@ -234,6 +293,12 @@ class bitbang(object):
         """
         Clean up GPIO resources if managed.
         """
+        print("clean up")
+        if self._DC:
+            self._DC.release()
+        if self._RST:                                                                                                                                   
+            self._RST.release()                                                                                                                         
+
         if self._managed:
             self._gpio.cleanup()
 
@@ -272,12 +337,14 @@ class spi(bitbang):
                  bus_speed_hz=8000000, cs_high=False, transfer_size=4096,
                  gpio_DC=24, gpio_RST=25):
         assert(bus_speed_hz in [mhz * 1000000 for mhz in [0.5, 1, 2, 4, 8, 16, 32]])
+        print("init spi obj")
 
         bitbang.__init__(self, gpio, transfer_size, DC=gpio_DC, RST=gpio_RST)
 
         try:
             self._spi = spi or self.__spidev__()
             self._spi.open(port, device)
+            print("spi port-{}, device-{}".format(port, device))   
             self._spi.cshigh = cs_high
         except (IOError, OSError) as e:
             if e.errno == errno.ENOENT:
