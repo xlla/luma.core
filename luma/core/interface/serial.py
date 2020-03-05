@@ -173,55 +173,30 @@ class bitbang(object):
         self._SDA = self._configure(kwargs.get("SDA"))
         self._CE = self._configure(kwargs.get("CE"))
         print("clk:{}, sda:{}, ce:{}".format(self._SCLK,self._SDA,self._CE))
-        self.set_line("TRI_STATE_ALL", 0)                                                                                                                           
+        self.set_line("TRI_STATE_ALL", 0, "luma.core")                                                                                                                           
 
         self._DC = self._configure(kwargs.get("DC"), "luma.core.dc")                
         self._RST = self._configure(kwargs.get("RST"), "luma.core.reset")           
 
         time.sleep(0.1)
-        self.set_line("TRI_STATE_ALL", 1) 
+        self.set_line("TRI_STATE_ALL", 1, "luma.core") 
         self._cmd_mode = 0  # Command mode = Hold low
         self._data_mode = 1  # Data mode = Pull high
 
         if self._RST is not None:
             line = self._RST
-            #line = self._gpio.Chip('gpiochip0').get_line(self._RST)  
-            #print("reset device, pin - {}, {}".format(line, line.owner()))
-            print("pin - {}, {} / {}".format(self._RST, line.owner().name(), line.offset())) 
-            #line = line.owner().get_lines([line.offset()])                                         
-            line.set_value(0)
-            #line.set_value(0)
-            time.sleep(0.01)
-            line.set_value(1)  
+            line.set_value(0) # Reset device
+            time.sleep(0.01) 
+            line.set_value(1)  # Keep RESET pulled high
 
             #self._gpio.output(self._RST, self._gpio.LOW)  # Reset device
             #self._gpio.output(self._RST, self._gpio.HIGH)  # Keep RESET pulled high
 
-    def set_line(self, name, value):                                                                                                                             
-        line = self._gpio.find_line(name)                                                                                                                       
-        line.request(consumer=line.owner().name(), type=self._gpio.LINE_REQ_DIR_OUT)                                                                            
-        line.set_value(value)                                                                                                                              
-        line.release()   
-
-        if self._RST is not None:
-            line = self._RST
-            #line = self._gpio.Chip('gpiochip0').get_line(self._RST)  
-            #print("reset device, pin - {}, {}".format(line, line.owner()))
-            print("reset device, pin - {}, {} / {}".format(self._RST, line.owner().name(), line.offset())) 
-            #line = line.owner().get_lines([line.offset()])                                         
-            line.set_value(0)
-            #line.set_value(0)
-            time.sleep(0.01)
-            line.set_value(1)  
-
-            #self._gpio.output(self._RST, self._gpio.LOW)  # Reset device
-            #self._gpio.output(self._RST, self._gpio.HIGH)  # Keep RESET pulled high
-
-def set_line(self, name, value, consumer):                                                                                                                             
-        line = self._gpio.find_line(name)                                                                                                                       
-        line.request(consumer=consumer, type=self._gpio.LINE_REQ_DIR_OUT)                                                                            
-        line.set_value(value)                                                                                                                              
-        line.release()   
+    def set_line(self, name, value, consumer):                               
+        line = self._gpio.find_line(name)                                  
+        line.request(consumer=consumer, type=self._gpio.LINE_REQ_DIR_OUT)
+        line.set_value(value)                                                 
+        line.release() 
 
     def _configure(self, pin,consumer="luma.core"):
         if pin is not None:
