@@ -168,15 +168,16 @@ class bitbang(object):
         self._transfer_size = transfer_size
         self._managed = gpio is None
         self._gpio = gpio or self.__rpi_gpio__()
-
+        print("init bitbang ...")
         self._SCLK = self._configure(kwargs.get("SCLK"))
         self._SDA = self._configure(kwargs.get("SDA"))
         self._CE = self._configure(kwargs.get("CE"))
         print("clk:{}, sda:{}, ce:{}".format(self._SCLK,self._SDA,self._CE))
         self.set_line("TRI_STATE_ALL", 0)                                                                                                                           
 
-        self._DC = self._configure(kwargs.get("DC"))
-        self._RST = self._configure(kwargs.get("RST"))
+        self._DC = self._configure(kwargs.get("DC"), "luma.core.dc")                
+        self._RST = self._configure(kwargs.get("RST"), "luma.core.reset")           
+
         time.sleep(0.1)
         self.set_line("TRI_STATE_ALL", 1) 
         self._cmd_mode = 0  # Command mode = Hold low
@@ -202,32 +203,51 @@ class bitbang(object):
         line.set_value(value)                                                                                                                              
         line.release()   
 
-    def _configure(self, pin):
+        if self._RST is not None:
+            line = self._RST
+            #line = self._gpio.Chip('gpiochip0').get_line(self._RST)  
+            #print("reset device, pin - {}, {}".format(line, line.owner()))
+            print("reset device, pin - {}, {} / {}".format(self._RST, line.owner().name(), line.offset())) 
+            #line = line.owner().get_lines([line.offset()])                                         
+            line.set_value(0)
+            #line.set_value(0)
+            time.sleep(0.01)
+            line.set_value(1)  
+
+            #self._gpio.output(self._RST, self._gpio.LOW)  # Reset device
+            #self._gpio.output(self._RST, self._gpio.HIGH)  # Keep RESET pulled high
+
+def set_line(self, name, value, consumer):                                                                                                                             
+        line = self._gpio.find_line(name)                                                                                                                       
+        line.request(consumer=consumer, type=self._gpio.LINE_REQ_DIR_OUT)                                                                            
+        line.set_value(value)                                                                                                                              
+        line.release()   
+
+    def _configure(self, pin,consumer="luma.core"):
         if pin is not None:
             if pin == 7:
-                self.set_line("MUX32_DIR", 1)
+                self.set_line("MUX32_DIR", 1, consumer)
                 line = self._gpio.Chip('gpiochip0').get_line(48) 
-                print("mux32")
+                print("config {0}, {1} - mux32".format(consumer, pin))  
             elif pin == 8:
-                self.set_line("MUX30_DIR", 1)    
+                self.set_line("MUX30_DIR", 1, consumer)    
                 line = self._gpio.Chip('gpiochip0').get_line(49)
-                print("mux30")
+                print("config {0}, {1} - mux30".format(consumer, pin)) 
             elif pin == 9:
-                self.set_line("MUX28_DIR", 1)
+                self.set_line("MUX28_DIR", 1, consumer)
                 line = self._gpio.Chip('gpiochip0').get_line(183)
-                print("mux28")                             
+                print("config {0}, {1} - mux28".format(consumer, pin)) 
 
             else:
-                print("unknow pin mapping !!!!!!!!!!")
+                print("Error: config {0}, {1} - unknow mux!".format(consumer, pin))
                 return None
+               
             #self._gpio.setup(pin, self._gpio.OUT)
-            #chip = self._gpio.Chip('gpiochip0')
             #line = self._gpio.Chip('gpiochip0').get_line(pin) 
-            #pinname = 'DIG{}_PU_PD'.format(pin)
+            #pinname = 'DIG{}_PU_PD'.format(pin) #no need pullup
             #line = self._gpio.find_line(pinname) 
             #print("pin - {}, {} / {}".format(pinname, line.owner().name(), line.offset()))
-            print("pin - {}, {} / {}".format(pin, line.owner().name(), line.offset())) 
-            line.request(consumer=line.owner().name(), type=self._gpio.LINE_REQ_DIR_OUT)
+            line.request(consumer=consumer, type=self._gpio.LINE_REQ_DIR_OUT)
             #line.release()  
             
             #return pin
@@ -337,7 +357,7 @@ class spi(bitbang):
                  bus_speed_hz=8000000, cs_high=False, transfer_size=4096,
                  gpio_DC=24, gpio_RST=25):
         assert(bus_speed_hz in [mhz * 1000000 for mhz in [0.5, 1, 2, 4, 8, 16, 32]])
-        print("init spi obj")
+        print("init spi... ")
 
         bitbang.__init__(self, gpio, transfer_size, DC=gpio_DC, RST=gpio_RST)
 

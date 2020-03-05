@@ -133,6 +133,7 @@ class make_serial(object):
         from luma.core.interface.serial import i2c
         return i2c(port=self.opts.i2c_port, address=self.opts.i2c_address)
 
+
     def spi(self):
         from luma.core.interface.serial import spi
         if hasattr(self.opts, 'gpio') and self.opts.gpio is not None:
@@ -143,10 +144,14 @@ class make_serial(object):
                 pkg = importlib.import_module(packageName)
                 mode = getattr(pkg, attrName)
                 GPIO.setmode(mode)
+            elif self.opts.gpio == "gpiod":
+                print("using libgpiod...")
             else:
                 GPIO.setmode(GPIO.BCM)
-
-            atexit.register(GPIO.cleanup)
+            if self.opts.gpio == "gpiod": 
+                print("no need cleanup")
+            else:
+                atexit.register(GPIO.cleanup)
         else:
             GPIO = None
 
